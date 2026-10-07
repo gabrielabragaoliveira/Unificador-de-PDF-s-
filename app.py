@@ -1,86 +1,107 @@
 import streamlit as st
 import fitz  # PyMuPDF
-import io
+from PIL import Image
 
-# Configuração inicial da página
-st.set_page_config(page_title="PDF Merger Turbo", page_icon="🔗", layout="centered")
+# Configuração inicial da página (usando layout "wide" para caber a grade melhor)
+st.set_page_config(page_title="PDF Merger Turbo", page_icon="🔗", layout="wide")
 
 st.title("🔗 Mesclador de PDFs Turbo")
-st.markdown("Faça o upload dos seus PDFs, organize a ordem de junção e baixe a prancha final de forma rápida e segura.")
+st.markdown("Faça o upload dos seus PDFs, organize a ordem de junção visualmente e baixe a prancha final.")
+
+# --- FUNÇÃO PARA GERAR MINIATURAS COM CACHE ---
+# O cache evita que o PDF seja reprocessado toda vez que você clica em um botão
+@st.cache_data(show_spinner=False)
+def get_pdf_thumbnail(file_bytes):
+    try:
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        page = doc.load_page(0) # Pega a primeira página
+        # Reduz a resolução para gerar uma miniatura leve (zoom de 20%)
+        pix = page.get_pixmap(matrix=fitz.Matrix(0.2, 0.2)) 
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        doc.close()
+        return img
+    except Exception:
+        return None
 
 # PASSO 1: Upload dos arquivos
 uploaded_files = st.file_uploader("📥 PASSO 1: Faça o upload dos PDFs", type="pdf", accept_multiple_files=True)
 
 if uploaded_files:
-    # Inicializa o estado de sessão para manter a memória da ordem dos arquivos
     current_file_names = [f.name for f in uploaded_files]
     
-    # Se novos arquivos foram adicionados ou a ordem ainda não foi criada, atualizamos
     if "file_order" not in st.session_state or set(st.session_state.file_order) != set(current_file_names):
-        st.session_state.file_order = current_file_names
+        # Remove arquivos que não estão mais no upload ou adiciona os novos no final
+        st.session_state.file_order = [f for f in st.session_state.file_order if f in current_file_names] if "file_order" in st.session_state else []
+        for name in current_file_names:
+            if name not in st.session_state.file_order:
+                st.session_state.file_order.append(name)
 
-    # Dicionário para mapear os nomes na tela para os arquivos reais em memória
     file_dict = {f.name: f for f in uploaded_files}
 
     st.markdown("---")
-    st.subheader("🛠️ PASSO 2: Organize a ordem")
+    st.subheader("🛠️ PASSO 2: Organize a ordem (Visual)")
+    st.markdown("Use as setas abaixo de cada miniatura para mover o arquivo para a esquerda ou direita.")
     
-    # Colunas para a interface de reordenação
-    col1, col2 = st.columns([3, 1])
+    # Define a quantidade de colunas da grade (ex: 5 por linha, similar ao Adobe)
+    num_cols = 5
+    cols = st.columns(num_cols)
     
-    with col1:
-        selected_file = st.selectbox("Selecione um arquivo na lista para mover:", st.session_state.file_order)
-        
-    with col2:
-        st.write("") # Espaçamento para alinhar com a caixa de texto
-        st.write("")
-        c_up, c_down = st.columns(2)
-        
-        # Lógica para subir na lista
-        if c_up.button("⬆️ Subir", use_container_width=True):
-            idx = st.session_state.file_order.index(selected_file)
-            if idx > 0:
-                st.session_state.file_order[idx], st.session_state.file_order[idx-1] = st.session_state.file_order[idx-1], st.session_state.file_order[idx]
-                st.rerun() # Atualiza a tela imediatamente
-                
-        # Lógica para descer na lista
-        if c_down.button("⬇️ Descer", use_container_width=True):
-            idx = st.session_state.file_order.index(selected_file)
-            if idx < len(st.session_state.file_order) - 1:
-                st.session_state.file_order[idx], st.session_state.file_order[idx+1] = st.session_state.file_order[idx+1], st.session_state.file_order[idx]
-                st.rerun() # Atualiza a tela imediatamente
-
-    st.markdown("**Ordem que será gerada no PDF Final:**")
     for i, name in enumerate(st.session_state.file_order):
-        st.info(f"{i+1}º - {name}")
+        col_idx = i % num_cols
+        
+        with cols[col_idx]:
+            # Cria um container visual para cada arquivo
+            with st.container(border=True):
+                # Obtém e exibe a miniatura
+                file_obj = file_dict[name]
+                thumb = get_pdf_thumbnail(file_obj.getvalue())
+                
+                if thumb:
+                    st.image(thumb, use_container_width=True)
+                else:
+                    st.write("📄 Preview não disponível")
+                
+                # Exibe o nome cortado para não quebrar o layout
+                st.caption(f"**{i+1}º** - {name[:15]}..." if len(name) > 15 else f"**{i+1}º** - {name}")
+                
+                # Botões de navegação
+                b1, b2, b3 = st.columns([1, 1, 1])
+                
+                with b1:
+                    if st.button("◀", key=f"left_{i}_{name}", use_container_width=True, disabled=(i == 0)):
+                        # Troca com o anterior
+                        st.session_state.file_order[i], st.session_state.file_order[i-1] = st.session_state.file_order[i-1], st.session_state.file_order[i]
+                        st.rerun()
+                with b2:
+                    if st.button("❌", key=f"del_{i}_{name}", use_container_width=True, help="Remover da lista"):
+                        st.session_state.file_order.pop(i)
+                        st.rerun()
+                with b3:
+                    if st.button("▶", key=f"right_{i}_{name}", use_container_width=True, disabled=(i == len(st.session_state.file_order) - 1)):
+                        # Troca com o próximo
+                        st.session_state.file_order[i], st.session_state.file_order[i+1] = st.session_state.file_order[i+1], st.session_state.file_order[i]
+                        st.rerun()
 
     st.markdown("---")
     st.subheader("🔗 PASSO 3: Juntar e Baixar")
     
-    # Botão de processamento principal
     if st.button("Gerar PDF Único", type="primary", use_container_width=True):
         with st.spinner("⏳ Processando e unindo pranchas pesadas, aguarde..."):
             try:
-                # Cria um PDF final vazio
                 doc_final = fitz.open()
                 
-                # Vai inserindo cada PDF na ordem selecionada
                 for name in st.session_state.file_order:
                     file_obj = file_dict[name]
-                    file_obj.seek(0) # Reinicia o ponteiro de leitura do arquivo
-                    
-                    # Abre e mescla
+                    file_obj.seek(0)
                     doc_temp = fitz.open(stream=file_obj.read(), filetype="pdf")
                     doc_final.insert_pdf(doc_temp)
                     doc_temp.close()
                 
-                # Salva o documentaço na memória do Streamlit
                 pdf_bytes = doc_final.write()
                 doc_final.close()
                 
                 st.success("✨ Sucesso Absoluto! Seu PDF está pronto para download.")
                 
-                # Botão nativo de download do Streamlit
                 st.download_button(
                     label="📥 Baixar PDF Final",
                     data=pdf_bytes,
