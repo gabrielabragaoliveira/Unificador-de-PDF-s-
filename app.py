@@ -5,7 +5,7 @@ from PIL import Image
 # Configuração inicial da página (usando layout "wide" para caber a grade melhor)
 st.set_page_config(page_title="PDF Merger Turbo", page_icon="🔗", layout="wide")
 
-st.title("🔗 Mesclador de PDFs Turbo")
+st.title("🔗 Mesclador de PDFs")
 st.markdown("Faça o upload dos seus PDFs, organize a ordem de junção visualmente e baixe a prancha final de forma rápida e segura.")
 
 # --- FUNÇÃO PARA GERAR MINIATURAS COM CACHE ---
@@ -127,3 +127,5 @@ if uploaded_files:
                     )
                 except Exception as e:
                     st.error(f"❌ Ocorreu um erro ao unir os arquivos: {e}")
+
+st.markdown("atualizado 07/10/2026         by redmargoth")
