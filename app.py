@@ -128,4 +128,4 @@ if uploaded_files:
                 except Exception as e:
                     st.error(f"❌ Ocorreu um erro ao unir os arquivos: {e}")
 
-st.markdown("código atualizado 07/10/2026 - by redmargoth")
+st.markdown("<p style='text-align: center; color: gray; font-size: 12px;'>código atualizado 07/10/2026  -  by @redmargoth</p>", unsafe_allow_html=True)
